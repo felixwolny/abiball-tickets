@@ -126,11 +126,12 @@ function ManagePanel({ tickets, onUpdate, onDelete }) {
       ) : (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Status</th><th>Aktionen</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Empfänger</th><th>Status</th><th>Aktionen</th><th></th></tr></thead>
             <tbody>
               {filtered.map(t => (
                 <tr key={t.id}>
                   <td className="code-cell">{t.code}</td>
+                  <td style={{ color: t.recipient ? 'var(--text)' : 'var(--text3)', fontSize: 13 }}>{t.recipient || '—'}</td>
                   <td>
                     {t.status === 'used'   && <span className="badge b-used">✓ Verwendet</span>}
                     {t.status === 'sent'   && <span className="badge b-sent">→ Verschickt</span>}
@@ -313,7 +314,7 @@ function CheckinPanel({ tickets, onCheckin }) {
 }
 
 // ── VERSAND TAB ────────────────────────────────────────────
-function VersandPanel({ tickets }) {
+function VersandPanel({ tickets, onAssign }) {
   const [name, setName]     = useState('');
   const [count, setCount]   = useState(1);
   const [ready, setReady]   = useState(false);
@@ -334,9 +335,7 @@ function VersandPanel({ tickets }) {
 
     setLoading(true);
     const selected = unsent.slice(0, n);
-    const batch = writeBatch(db);
-    selected.forEach(t => batch.update(doc(db, 'tickets', t.id), { status: 'sent' }));
-    await batch.commit();
+    await onAssign(name.trim(), selected);
     setCodes(selected.map(t => t.code));
     setReady(true);
     setLoading(false);
@@ -421,6 +420,66 @@ function VersandPanel({ tickets }) {
   );
 }
 
+// ── HISTORIE TAB ───────────────────────────────────────────
+function HistoriePanel() {
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const q = query(collection(db, 'assignments'), orderBy('ts', 'desc'));
+    const unsub = onSnapshot(q, snap => {
+      setAssignments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const filtered = assignments.filter(a =>
+    a.name.toLowerCase().includes(search.toLowerCase().trim())
+  );
+
+  if (loading) return <div className="loading">lade historie …</div>;
+
+  return (
+    <div className="panel active">
+      <div className="search-filter">
+        <input
+          type="text"
+          value={search}
+          placeholder="Nach Name suchen …"
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <div className="empty">— noch keine Zuweisungen —</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {filtered.map(a => (
+            <div className="card" key={a.id} style={{ marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div>
+                  <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.4rem', fontWeight: 600, color: 'var(--text)' }}>
+                    {a.name}
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--text3)', letterSpacing: '0.05em', marginTop: 2 }}>
+                    {a.codes.length} {a.codes.length === 1 ? 'Ticket' : 'Tickets'} · {a.ts?.toDate().toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) ?? '—'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: '0.8rem' }}>
+                {a.codes.map(code => (
+                  <span key={code} className="code-pill">{code}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── APP ────────────────────────────────────────────────────
 export default function App() {
   const [tickets, setTickets] = useState([]);
@@ -459,8 +518,25 @@ export default function App() {
     await addDoc(collection(db, 'checkins'), { code, ts: serverTimestamp() });
   }, []);
 
-  const tabs = ['overview', 'manage', 'versand', 'checkin'];
-  const tabLabels = ['■ Übersicht', '■ Tickets', '■ Versand', '■ Einlass'];
+  const handleAssign = useCallback(async (name, selectedTickets) => {
+    const batch = writeBatch(db);
+    selectedTickets.forEach(t => {
+      batch.update(doc(db, 'tickets', t.id), {
+        status: 'sent',
+        recipient: name,
+        assignedAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+    await addDoc(collection(db, 'assignments'), {
+      name,
+      codes: selectedTickets.map(t => t.code),
+      ts: serverTimestamp(),
+    });
+  }, []);
+
+  const tabs = ['overview', 'manage', 'versand', 'checkin', 'historie'];
+  const tabLabels = ['■ Übersicht', '■ Tickets', '■ Versand', '■ Einlass', '■ Historie'];
 
   return (
     <>
@@ -487,8 +563,9 @@ export default function App() {
           <>
             {activeTab === 'overview' && <OverviewPanel tickets={tickets} onGenerate={handleGenerate} />}
             {activeTab === 'manage'   && <ManagePanel   tickets={tickets} onUpdate={handleUpdate} onDelete={handleDelete} />}
-            {activeTab === 'versand'  && <VersandPanel  tickets={tickets} />}
+            {activeTab === 'versand'  && <VersandPanel  tickets={tickets} onAssign={handleAssign} />}
             {activeTab === 'checkin'  && <CheckinPanel  tickets={tickets} onCheckin={handleCheckin} />}
+            {activeTab === 'historie' && <HistoriePanel />}
           </>
         )}
       </div>
