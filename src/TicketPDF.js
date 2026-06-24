@@ -249,10 +249,10 @@ export default function TicketPDF({ name, codes, date }) {
           <Text style={s.recipientName}>{name}</Text>
 
           <Text style={s.bodyText}>
-            Wir freuen uns, dich herzlich zum Abiball 2026 einzuladen. Dieser Abend wird ein unvergessliches Fest zum Abschluss unserer gemeinsamen Schulzeit — mit Musik, Tanz und Erinnerungen für immer.
+            hiermit erhältst du deine Eintrittskarte(n) für den Abiball 2026. Im Folgenden findest du deine persönlichen Ticket-Codes.
           </Text>
           <Text style={s.bodyText}>
-            Bitte halte deine Ticket-Codes bereit und zeige sie beim Einlass vor. Jeder Code ist einmalig gültig und personalisiert.
+            Bitte halte die Codes beim Einlass bereit, digital oder ausgedruckt. Jeder Code ist einmalig gültig und ausschließlich für dich personalisiert.
           </Text>
 
           <View style={s.divider} />
